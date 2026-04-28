@@ -13,6 +13,8 @@ LSPosed/Xposed module for `com.guoshi.httpcanary`.
 - Behavior: splits the request line in record lists into two lines:
   - `METHOD host`
   - `/uri/path?query`
+- Hook point: `com.guoshi.httpcanary.ui.content.HttpContentActivity#onCreate(Bundle)`
+- Behavior: adds a default `Preview` tab to packet details. The preview shows request body first, then response body.
 
 ## Export Path
 

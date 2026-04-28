@@ -27,6 +27,7 @@ public final class MainHook implements IXposedHookLoadPackage {
         try {
             hookHistorySessionLongPress(lpparam.classLoader);
             hookRecordUrlLine(lpparam.classLoader);
+            hookContentPreviewTab(lpparam.classLoader);
             XposedBridge.log("HttpCanaryHarExporter: hooks installed");
         } catch (Throwable t) {
             XposedBridge.log("HttpCanaryHarExporter: install hook failed");
@@ -53,6 +54,21 @@ public final class MainHook implements IXposedHookLoadPackage {
 
                         showSessionMenu(activity, classLoader, captureSession);
                         param.setResult(true);
+                    }
+                }
+        );
+    }
+
+    private static void hookContentPreviewTab(final ClassLoader classLoader) {
+        XposedHelpers.findAndHookMethod(
+                "com.guoshi.httpcanary.ui.content.HttpContentActivity",
+                classLoader,
+                "onCreate",
+                android.os.Bundle.class,
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        BodyPreviewInstaller.install((Activity) param.thisObject);
                     }
                 }
         );
