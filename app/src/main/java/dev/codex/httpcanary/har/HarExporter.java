@@ -13,7 +13,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -165,6 +164,7 @@ final class HarExporter {
                 getString(record, "reqFilePath", "getReqFilePath"),
                 getInt(record, "reqBodyOffset", "getReqBodyOffset", 0)
         );
+        byte[] decodedBody = BodyCodec.decode(body, headers);
 
         JSONObject request = new JSONObject();
         request.put("method", method != null ? method : "GET");
@@ -175,8 +175,8 @@ final class HarExporter {
         request.put("queryString", queryString(url));
         request.put("headersSize", -1);
         request.put("bodySize", body == null ? 0 : body.length);
-        if (body != null && body.length > 0) {
-            request.put("postData", bodyToPostData(headers, body));
+        if (decodedBody != null && decodedBody.length > 0) {
+            request.put("postData", bodyToPostData(headers, decodedBody));
         }
         return request;
     }
@@ -187,6 +187,7 @@ final class HarExporter {
                 getString(record, "resFilePath", "getResFilePath"),
                 getInt(record, "resBodyOffset", "getResBodyOffset", 0)
         );
+        byte[] decodedBody = BodyCodec.decode(body, headers);
 
         JSONObject response = new JSONObject();
         response.put("status", getInt(record, "code", "getCode", 0));
@@ -194,7 +195,7 @@ final class HarExporter {
         response.put("httpVersion", httpVersion(record));
         response.put("cookies", new JSONArray());
         response.put("headers", headersToJson(headers));
-        response.put("content", bodyToContent(headers, body));
+        response.put("content", bodyToContent(headers, decodedBody));
         response.put("redirectURL", firstHeader(headers, "Location", ""));
         response.put("headersSize", -1);
         response.put("bodySize", body == null ? 0 : body.length);
@@ -219,8 +220,8 @@ final class HarExporter {
     }
 
     private static void putBodyText(JSONObject object, List<?> headers, byte[] body) throws Exception {
-        if (isTextual(headers, body)) {
-            object.put("text", new String(body, charsetFromContentType(firstHeader(headers, "Content-Type", null))));
+        if (BodyCodec.isTextual(headers, body)) {
+            object.put("text", new String(body, BodyCodec.charsetFromContentType(firstHeader(headers, "Content-Type", null))));
         } else {
             object.put("text", Base64.encodeToString(body, Base64.NO_WRAP));
             object.put("encoding", "base64");
@@ -305,54 +306,7 @@ final class HarExporter {
     }
 
     private static String firstHeader(List<?> headers, String name, String defaultValue) throws Exception {
-        if (headers == null) {
-            return defaultValue;
-        }
-        for (Object entry : headers) {
-            String headerName = getString(entry, "name", null);
-            if (headerName != null && headerName.equalsIgnoreCase(name)) {
-                String value = getString(entry, "value", null);
-                return value != null ? value : defaultValue;
-            }
-        }
-        return defaultValue;
-    }
-
-    private static boolean isTextual(List<?> headers, byte[] body) throws Exception {
-        String contentType = firstHeader(headers, "Content-Type", "");
-        String lower = contentType.toLowerCase(Locale.US);
-        if (lower.startsWith("text/")
-                || lower.contains("json")
-                || lower.contains("xml")
-                || lower.contains("javascript")
-                || lower.contains("x-www-form-urlencoded")) {
-            return true;
-        }
-        int check = Math.min(body.length, 512);
-        for (int i = 0; i < check; i++) {
-            byte b = body[i];
-            if (b == 0) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    private static Charset charsetFromContentType(String contentType) {
-        if (contentType != null) {
-            String[] parts = contentType.split(";");
-            for (String part : parts) {
-                String trimmed = part.trim();
-                if (trimmed.toLowerCase(Locale.US).startsWith("charset=")) {
-                    try {
-                        return Charset.forName(trimmed.substring("charset=".length()).replace("\"", ""));
-                    } catch (Throwable ignored) {
-                        break;
-                    }
-                }
-            }
-        }
-        return Charset.forName("UTF-8");
+        return BodyCodec.firstHeader(headers, name, defaultValue);
     }
 
     private static String httpVersion(Object record) throws Exception {

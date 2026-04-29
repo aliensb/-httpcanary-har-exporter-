@@ -20,9 +20,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.charset.Charset;
 import java.util.List;
-import java.util.Locale;
 
 final class BodyPreviewInstaller {
     private static final int BODY_LIMIT_BYTES = 256 * 1024;
@@ -228,10 +226,11 @@ final class BodyPreviewInstaller {
             if (body == null || body.length == 0) {
                 return "";
             }
-            if (!isTextual(headers, body)) {
-                return "[binary body, " + body.length + " bytes]";
+            byte[] decodedBody = BodyCodec.decode(body, headers);
+            if (!BodyCodec.isTextual(headers, decodedBody)) {
+                return "[binary body, " + decodedBody.length + " bytes]";
             }
-            return new String(body, charsetFromContentType(firstHeader(headers, "Content-Type", null)));
+            return new String(decodedBody, BodyCodec.charsetFromContentType(BodyCodec.firstHeader(headers, "Content-Type", null)));
         } catch (Throwable t) {
             return "[preview failed: " + t.getMessage() + "]";
         }
@@ -272,56 +271,6 @@ final class BodyPreviewInstaller {
         } finally {
             input.close();
         }
-    }
-
-    private static boolean isTextual(List<?> headers, byte[] body) throws Exception {
-        String contentType = firstHeader(headers, "Content-Type", "");
-        String lower = contentType.toLowerCase(Locale.US);
-        if (lower.startsWith("text/")
-                || lower.contains("json")
-                || lower.contains("xml")
-                || lower.contains("javascript")
-                || lower.contains("x-www-form-urlencoded")) {
-            return true;
-        }
-        int check = Math.min(body.length, 512);
-        for (int i = 0; i < check; i++) {
-            if (body[i] == 0) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    private static String firstHeader(List<?> headers, String name, String defaultValue) throws Exception {
-        if (headers == null) {
-            return defaultValue;
-        }
-        for (Object entry : headers) {
-            String headerName = getString(entry, "name", null);
-            if (headerName != null && headerName.equalsIgnoreCase(name)) {
-                String value = getString(entry, "value", null);
-                return value != null ? value : defaultValue;
-            }
-        }
-        return defaultValue;
-    }
-
-    private static Charset charsetFromContentType(String contentType) {
-        if (contentType != null) {
-            String[] parts = contentType.split(";");
-            for (String part : parts) {
-                String trimmed = part.trim();
-                if (trimmed.toLowerCase(Locale.US).startsWith("charset=")) {
-                    try {
-                        return Charset.forName(trimmed.substring("charset=".length()).replace("\"", ""));
-                    } catch (Throwable ignored) {
-                        break;
-                    }
-                }
-            }
-        }
-        return Charset.forName("UTF-8");
     }
 
     private static Object getObject(Object receiver, String fieldName, String getterName) throws Exception {
